@@ -1,6 +1,7 @@
 #include <WiFi.h>
 #include "DNSServer.h"
 #include "knomi.h"
+#include "watchdog.h"
 
 #define DEFAULT_KLIPPER_PORT "80"
 #define DEFAULT_KLIPPER_TOOL "tool0"
@@ -15,8 +16,15 @@ static IPAddress ap_subnet = AP_SUBNET;     // subnet mask
 
 knomi_wifi_scan_t wifi_scan;
 knomi_config_t knomi_config;
+knomi_watchdog_t knomi_watchdog;
 
 void webserver_setup(void);
+
+// --- Watchdog config persistence ---
+// Stored in its own EEPROM region (well clear of knomi_config_t, which lives
+// just after offset 0) so changing either struct can't corrupt the other.
+#define EEPROM_WD_SIGN   0x57440001  // "WD" v1
+#define EEPROM_WD_OFFSET 512
 
 static uint16_t knomi_config_require = WEB_POST_NULL;
 
@@ -108,6 +116,32 @@ void eeprom_init(void) {
         EEPROM.commit();
         Serial.println("knomi_config from default & INIT EEPROM");
     }
+
+    // Watchdog options live in their own signed region. Defaults are the safe,
+    // self-healing values so a fresh device is protected out of the box.
+    uint32_t wd_sign;
+    EEPROM.get<uint32_t>(EEPROM_WD_OFFSET, wd_sign);
+    if (wd_sign == EEPROM_WD_SIGN) {
+        EEPROM.get<knomi_watchdog_t>(EEPROM_WD_OFFSET + EEPROM_SIGN_SIZE, knomi_watchdog);
+    } else {
+        knomi_watchdog.disable_sleep = true;
+        knomi_watchdog.wifi_watchdog = true;
+        knomi_watchdog.moonraker_watchdog = true;
+        EEPROM.put<uint32_t>(EEPROM_WD_OFFSET, EEPROM_WD_SIGN);
+        EEPROM.put<knomi_watchdog_t>(EEPROM_WD_OFFSET + EEPROM_SIGN_SIZE, knomi_watchdog);
+        EEPROM.commit();
+    }
+    Serial.printf("watchdog: sleep_off=%d wifi=%d moonraker=%d\r\n",
+                  knomi_watchdog.disable_sleep, knomi_watchdog.wifi_watchdog,
+                  knomi_watchdog.moonraker_watchdog);
+}
+
+void eeprom_write_watchdog_config(void) {
+    EEPROM.put<knomi_watchdog_t>(EEPROM_WD_OFFSET + EEPROM_SIGN_SIZE, knomi_watchdog);
+    EEPROM.commit();
+    Serial.printf("watchdog saved: sleep_off=%d wifi=%d moonraker=%d\r\n",
+                  knomi_watchdog.disable_sleep, knomi_watchdog.wifi_watchdog,
+                  knomi_watchdog.moonraker_watchdog);
 }
 
 void knomi_factory_reset(void) {
@@ -277,6 +311,8 @@ restart:
             Serial.println(knomi_config.sta_pwd);
             WiFi.setMinSecurity(knomi_config.sta_auth);
             wl_status_t n = WiFi.begin(knomi_config.sta_ssid, knomi_config.sta_pwd);  /*Connecting to Defined Access point*/
+            wifi_apply_sleep_setting();  // disable modem-sleep (if enabled) — main cause of drops on mains power
+            WiFi.setAutoReconnect(true); // let the stack auto-rejoin transient drops; the watchdog handles the rest
             wifi_status = WIFI_STATUS_CONNECTING;
             uint32_t timeout = millis() + WIFI_STA_TIMEOUT;
             while (millis() < timeout) {
@@ -324,6 +360,64 @@ restart:
     }
 }
 
+// --- Connectivity watchdog -------------------------------------------------
+// All WiFi driver calls live in wifi_task; other tasks (e.g. moonraker) ask for
+// a reconnect by setting this flag instead of touching WiFi directly. The
+// decision logic itself is the pure, unit-tested wifi_wd_step() in lib/Watchdog.
+static volatile bool wifi_reconnect_request = false;
+static wifi_wd_state_t wifi_wd_state = {0, 0};
+
+void wifi_request_reconnect(void) {
+    wifi_reconnect_request = true;
+}
+
+void wifi_apply_sleep_setting(void) {
+    // disable_sleep == true -> radio never powers down (stability on mains power);
+    // false -> restore the default WIFI_PS_MIN_MODEM power saving.
+    WiFi.setSleep(!knomi_watchdog.disable_sleep);
+}
+
+static void wifi_force_reconnect(const char * reason) {
+    Serial.print("[watchdog] WiFi reconnect: ");
+    Serial.println(reason);
+    WiFi.disconnect();           // keep radio on, keep stored creds
+    delay(50);
+    WiFi.begin(knomi_config.sta_ssid, knomi_config.sta_pwd);
+    wifi_apply_sleep_setting();  // re-assert sleep policy across reconnects
+}
+
+// Runs every wifi_task cycle. Gathers the live link state, lets the watchdog
+// core decide, and carries out the action (bounce the link / reboot).
+static void wifi_watchdog(void) {
+    wifi_mode_t mode = WiFi.getMode();
+
+    wifi_wd_input_t in;
+    in.sta_active = (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA);
+    in.has_ssid = (knomi_config.sta_ssid[0] != 0);
+    in.enabled = knomi_watchdog.wifi_watchdog;
+    in.connected = (WiFi.status() == WL_CONNECTED);
+    in.reconnect_requested = wifi_reconnect_request;
+    in.now_ms = millis();
+    in.reconnect_interval_ms = WIFI_RECONNECT_INTERVAL;
+    in.reboot_after_ms = WIFI_DOWN_REBOOT_MS;
+    wifi_reconnect_request = false;  // consume the request
+
+    switch (wifi_wd_step(&wifi_wd_state, &in)) {
+        case WD_ACTION_RECONNECT:
+            wifi_force_reconnect(in.reconnect_requested ? "requested (moonraker unreachable)"
+                                                        : "link down");
+            break;
+        case WD_ACTION_REBOOT:
+            Serial.println("[watchdog] WiFi down too long, rebooting...");
+            delay(100);
+            ESP.restart();
+            break;
+        case WD_ACTION_NONE:
+        default:
+            break;
+    }
+}
+
 void wifi_task(void * parameter) {
 
     eeprom_init();
@@ -351,6 +445,8 @@ void wifi_task(void * parameter) {
         if (m == WIFI_MODE_AP || m == WIFI_MODE_APSTA) {
             dnsServer.processNextRequest();
         }
+
+        wifi_watchdog();
 
         delay(100);
     }

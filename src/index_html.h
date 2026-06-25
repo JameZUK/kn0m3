@@ -519,6 +519,27 @@ text-align: center;">
     </div>
     <div class="card-grid">
       <div class="card">
+        <p class="card-title">Connection Watchdog</p>
+        <form id="watchdog-form" name="watchdog-form" action="/" method="POST">
+          <input type="hidden" name="wd_submit" value="1">
+          <label class="ant-form-item-row" style="justify-content: space-between;">
+              <span>Disable WiFi power-saving</span>
+              <input type="checkbox" name="wd_nosleep" style="width:auto;" $wd_nosleep$>
+          </label>
+          <label class="ant-form-item-row" style="justify-content: space-between;">
+              <span>Auto-reconnect &amp; reboot on WiFi loss</span>
+              <input type="checkbox" name="wd_wifi" style="width:auto;" $wd_wifi$>
+          </label>
+          <label class="ant-form-item-row" style="justify-content: space-between;">
+              <span>Recover when Klipper unreachable</span>
+              <input type="checkbox" name="wd_moonraker" style="width:auto;" $wd_moonraker$>
+          </label>
+          <input type="submit" id="submit-btn" style="background-color: #C02E2F;" value="Save">
+        </form>
+      </div>
+    </div>
+    <div class="card-grid">
+      <div class="card">
         <a href="update"><input type="submit" style="background-color: #C02E2F" id="sys-btn" value ="Update Firmware"></a>
         <span style="width: 10px;"></span>
         <form id="restart-form" name="restart-form" action="/" method="POST">

@@ -1,7 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define FW_VERSION "V1.0.2"
+#define FW_VERSION "V1.0.2-kn0m3"
 
  // default 80 for http
 #define SERVER_PORT 80
@@ -16,6 +16,11 @@
 #define AP_SUBNET   IPAddress(255, 255, 255, 0) // subnet mask
 
 #define WIFI_STA_TIMEOUT 15000  // 15s
+
+// --- Connectivity watchdog (self-healing) ---
+#define WIFI_RECONNECT_INTERVAL  5000    // ms between forced reconnect attempts while the link is down
+#define WIFI_DOWN_REBOOT_MS      120000  // reboot if the WiFi link stays down this long (last resort)
+#define MOONRAKER_FAIL_RECONNECT 5       // failed poll cycles before bouncing WiFi to clear a wedged stack
 
 // BTT red color for UI (RGB888)
 #define LV_32BIT_BTT_RED    0xC02F30

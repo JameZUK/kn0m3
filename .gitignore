@@ -1,0 +1,13 @@
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+mapfile.map
+
+# Python venv (local build tooling)
+.venv/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

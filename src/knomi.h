@@ -30,8 +30,18 @@ typedef struct {
     uint8_t count; // Number of WiFi Scanned
 } knomi_wifi_scan_t;
 
+// User-toggleable, persistently-stored connectivity watchdog options.
+// Stored in a separate EEPROM region from knomi_config_t so firmware upgrades
+// that change knomi_config_t don't wipe these (and vice-versa).
+typedef struct {
+    bool disable_sleep;      // disable WiFi modem-sleep (stability on mains power)
+    bool wifi_watchdog;      // auto-reconnect, and reboot on a prolonged WiFi outage
+    bool moonraker_watchdog; // bounce WiFi when Klipper/Moonraker is unreachable
+} knomi_watchdog_t;
+
 extern knomi_config_t knomi_config;
 extern knomi_wifi_scan_t wifi_scan;
+extern knomi_watchdog_t knomi_watchdog;
 
 #define WEB_POST_NULL                 (0)
 #define WEB_POST_LOCAL_HOSTNAME       BIT(0)
@@ -66,6 +76,9 @@ typedef enum {
 }wifi_status_t;
 
 wifi_status_t wifi_get_connect_status(void);
+void wifi_request_reconnect(void);     // ask the wifi task to drop & re-establish the STA link
+void wifi_apply_sleep_setting(void);   // (re)apply modem-sleep per knomi_watchdog.disable_sleep
+void eeprom_write_watchdog_config(void); // persist knomi_watchdog to EEPROM
 
 extern int32_t lis2dw12_acc[3];
 

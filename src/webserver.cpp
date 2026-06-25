@@ -65,6 +65,12 @@ String knomi_html_processor(const String& var){
     } else if (var == "hostname") {
         String hostname = knomi_config.hostname;
         value = hostname.isEmpty() ? "" : "value=" + hostname;
+    } else if (var == "wd_nosleep") {
+        value = knomi_watchdog.disable_sleep ? "checked" : "";
+    } else if (var == "wd_wifi") {
+        value = knomi_watchdog.wifi_watchdog ? "checked" : "";
+    } else if (var == "wd_moonraker") {
+        value = knomi_watchdog.moonraker_watchdog ? "checked" : "";
     } else  if (var == knomi_config.mode) {
         value = "selected";
     }
@@ -206,6 +212,17 @@ void webserver_setup(void) {
                 post_require |= WEB_POST_WIFI_CONFIG_MODE;
             }
             knomi_config.sta_auth = wifi_get_ahth_mode_from_scanned_list();
+        }
+
+        // Watchdog toggles. Unchecked checkboxes aren't submitted at all, so a
+        // hidden "wd_submit" marker tells us the form was sent; each toggle is
+        // then on iff its checkbox param is present.
+        if (request->hasParam("wd_submit", true)) {
+            knomi_watchdog.disable_sleep      = request->hasParam("wd_nosleep", true);
+            knomi_watchdog.wifi_watchdog      = request->hasParam("wd_wifi", true);
+            knomi_watchdog.moonraker_watchdog = request->hasParam("wd_moonraker", true);
+            eeprom_write_watchdog_config();
+            wifi_apply_sleep_setting();   // take effect immediately, no reconnect needed
         }
 
         knomi_config_require_change(post_require);

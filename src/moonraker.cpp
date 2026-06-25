@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include "moonraker.h"
 #include "knomi.h"
+#include "watchdog.h"
 
 // #define MOONRAKER_DEBUG
 
@@ -233,9 +234,21 @@ void moonraker_task(void * parameter) {
         NULL   // Task handle
         );
 
+    moonraker_wd_state_t mr_wd = {0};
     for(;;) {
         if (wifi_get_connect_status() == WIFI_STATUS_CONNECTED) {
             moonraker.http_get_loop();
+
+            // Reachability watchdog: the WiFi link is up, but can we actually
+            // reach Klipper? The UI already warns the user via moonraker.unconnected;
+            // here we self-heal by bouncing the WiFi link a couple of times to clear
+            // a wedged TCP stack (see moonraker_wd_step for the bounded policy).
+            if (moonraker_wd_step(&mr_wd, !moonraker.unconnected,
+                                  knomi_watchdog.moonraker_watchdog,
+                                  MOONRAKER_FAIL_RECONNECT)) {
+                Serial.println("[watchdog] Moonraker unreachable, forcing WiFi reconnect");
+                wifi_request_reconnect();
+            }
         }
         delay(200);
     }

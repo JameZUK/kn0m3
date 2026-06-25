@@ -1,5 +1,7 @@
 # kn0m3 — a self-healing KNOMI firmware
 
+[![CI](https://github.com/JameZUK/kn0m3/actions/workflows/ci.yml/badge.svg)](https://github.com/JameZUK/kn0m3/actions/workflows/ci.yml)
+
 A modern fork of the [BigTreeTech KNOMI](https://github.com/bigtreetech/KNOMI) firmware
 (`firmware` branch) focused on **WiFi reliability**. Stock KNOMI hardware works well but
 has a well-known habit of **dropping off WiFi and silently losing its connection to

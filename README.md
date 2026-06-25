@@ -106,12 +106,32 @@ pio run -e knomiv2
 pio test -e native
 ```
 
-The resulting firmware is at `.pio/build/<env>/firmware.bin`. Flash it over **USB-C** with
-the KNOMI removed from the toolhead (e.g. with `esptool.py`, or via the on-device
-**Update Firmware** / OTA page once you're already running a kn0m3 build).
+The resulting firmware is at `.pio/build/<env>/firmware.bin`.
 
 > The build runs fine on a Raspberry Pi (PlatformIO supports ARM); the produced `.bin` can
 > then be flashed from any machine.
+
+### Flashing over the network (OTA) ✅
+
+KNOMI ships a **dual-OTA partition layout** and an OTA web endpoint (AsyncElegantOTA), so
+you can update **without removing it from the toolhead**:
+
+1. **Web UI** — browse to `http://<knomi-ip>/update` (or `http://KNOMI.local/update` via
+   mDNS, using your configured hostname), upload `firmware.bin`, and let it reboot. The
+   on-screen **Update Firmware** button on the settings page links here too.
+2. **PlatformIO over the network** — uncomment the OTA lines in `platformio.ini`
+   (`upload_protocol = custom`, `extra_scripts = platformio_upload_ota.py`,
+   `upload_url = http://<knomi-ip>/update`) and run `pio run -e knomiv1 -t upload`.
+
+Because the stock BTT firmware uses the **same partition table and OTA endpoint**, you can
+even flash kn0m3 onto a stock KNOMI straight over the network — no USB needed. (First boot
+still resets the stored config, so you'll re-enter WiFi via the `BTT-KNOMI` AP.)
+
+### Flashing over USB
+
+Removed from the toolhead and connected to a computer, flash with `esptool.py` (or
+`pio run -e knomiv1 -t upload` with a serial port). This is the fallback if a device is
+ever bricked or unreachable on the network.
 
 ### First-time / upgrade notes
 - Flashing this firmware for the first time **resets the stored config** (you'll re-enter

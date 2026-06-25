@@ -93,79 +93,77 @@ All watchdog timings live in [`src/config.h`](src/config.h):
 
 ---
 
-## Building & flashing
+## Installation & flashing
 
-This is a standard [PlatformIO](https://platformio.org/) project.
+Pre-built firmware for every release is on the
+[**Releases** page](https://github.com/JameZUK/kn0m3/releases/latest). Grab the `.bin` for
+your board:
 
-```bash
-# KNOMI V1 (ESP32-WROOM)
-pio run -e knomiv1
+| File | Board | Chip |
+| --- | --- | --- |
+| `knomi-v1-firmware.bin` | KNOMI **V1** | ESP32-WROOM |
+| `knomi-v2-firmware.bin` | KNOMI **V2** | ESP32-S3 |
 
-# KNOMI V2 (ESP32-S3)
-pio run -e knomiv2
+> Not sure which you have? **V1 is display-only; V2 has a touchscreen.** Flashing the wrong
+> board's image won't brick anything — a mismatched image simply fails to boot and the
+> device stays as it was — but it won't run, so pick the right one.
 
-# Host unit tests for the watchdog
-pio test -e native
-```
+### Step 1 — First install, over USB (one time only)
 
-The resulting firmware is at `.pio/build/<env>/firmware.bin`.
+The stock BTT OTA is broken for **every** image — verified by control test, even BTT's
+*own* official firmware is rejected — so the first kn0m3 install has to go over USB. After
+this, you never need USB again.
 
-> The build runs fine on a Raspberry Pi (PlatformIO supports ARM); the produced `.bin` can
-> then be flashed from any machine.
+**You'll need:** [`esptool`](https://github.com/espressif/esptool) (`pip install esptool`),
+a USB-C cable, and the KNOMI unplugged from the toolhead and connected to your computer.
 
-### Flashing over the network (OTA) ✅
-
-KNOMI ships a **dual-OTA partition layout** and an OTA web endpoint (AsyncElegantOTA), so
-once you're running kn0m3 you can update **without removing it from the toolhead**:
-
-1. **Web UI** — browse to `http://<knomi-ip>/update` (or `http://KNOMI.local/update` via
-   mDNS, using your configured hostname), upload `firmware.bin`, and let it reboot. The
-   on-screen **Update Firmware** button on the settings page links here too.
-2. **PlatformIO over the network** — uncomment the OTA lines in `platformio.ini`
-   (`upload_protocol = custom`, `extra_scripts = platformio_upload_ota.py`,
-   `upload_url = http://<knomi-ip>/update`) and run `pio run -e knomiv1 -t upload`.
-
-> **A reliable OTA (v1.0.4+).** kn0m3 **replaces** BTT's bundled AsyncElegantOTA — which
-> demanded an MD5 field and reported *every* failure as an opaque HTTP 400
-> (`[HTTP ERROR] Bad Request`) — with its own small handler ([`src/ota.cpp`](src/ota.cpp)):
-> integrity comes from the **ESP32 image's own appended SHA-256**, which the bootloader
-> verifies before activating the new slot, plus an optional end-to-end SHA-256 transport
-> check. No MD5, no field-ordering games, and genuine failures come back as a readable
-> HTTP 500 (e.g. `OTA verify failed: …`).
-
-Flash from the command line with [`tools/ota_flash.sh`](tools/ota_flash.sh) (sends the
-firmware + its SHA-256 and prints the device's real response):
+**Easiest — the helper script** (put the matching `.bin` in the current directory first):
 
 ```bash
-# grab the firmware for your board from the Releases page, then:
-tools/ota_flash.sh <knomi-ip> knomi-v1-firmware.bin   # V1 (ESP32-WROOM)
-tools/ota_flash.sh <knomi-ip> knomi-v2-firmware.bin   # V2 (ESP32-S3)
+tools/usb_flash.sh v1            # or: v2      (optional serial port as a 2nd argument)
 ```
 
-> **The very first kn0m3 flash must be done over USB — once.** The stock BTT firmware's OTA
-> is the buggy thing kn0m3 replaces, and it's broken for **every** image: verified by
-> control test, even BTT's *own* official `knomi1_firmware.bin` is rejected with
-> `Could not end OTA`. So no client or checksum trick can flash a stock unit over the
-> network. Do the first install over USB with the one-liner below; from then on the reliable
-> OTA above handles every future update. (First boot resets stored config, so re-enter WiFi
-> via the `BTT-KNOMI` AP.)
->
-> ```bash
-> # download knomi-v1-firmware.bin from Releases, KNOMI on USB, then:
-> tools/usb_flash.sh v1            # or: v2 — optional serial port as 2nd arg
-> ```
+**Or by hand with esptool** (V1 shown; use `--chip esp32s3` for V2):
 
-### Flashing over USB
+```bash
+esptool.py --chip esp32 erase_region 0xe000 0x2000        # clear the OTA selector
+esptool.py --chip esp32 write_flash  0x10000 knomi-v1-firmware.bin
+```
 
-Removed from the toolhead and connected to a computer, flash with `esptool.py` (or
-`pio run -e knomiv1 -t upload` with a serial port). This is the fallback if a device is
-ever bricked or unreachable on the network.
+Both methods write **only the app slot** and reuse the bootloader + partition table already
+on the device (they match kn0m3's layout), so there's nothing else to flash. On first boot
+the stored config resets — reconnect WiFi via the **`BTT-KNOMI`** access point (same as
+stock), then point it at your Moonraker IP on the settings page.
 
-### First-time / upgrade notes
-- Flashing this firmware for the first time **resets the stored config** (you'll re-enter
-  WiFi via the `BTT-KNOMI` access point, same as stock). This is unavoidable when the
-  config format changes.
-- After that, the watchdog toggles persist independently across kn0m3 updates.
+### Step 2 — All future updates, over WiFi (no USB)
+
+Once kn0m3 is running, its reliable SHA-256 OTA ([`src/ota.cpp`](src/ota.cpp)) handles every
+update over the network — no need to touch the toolhead. Any one of:
+
+- **Helper script** — sends the image + its SHA-256 and prints the device's real response:
+  ```bash
+  tools/ota_flash.sh <knomi-ip> knomi-v1-firmware.bin
+  ```
+- **Web page** — browse to `http://<knomi-ip>/update` (or `http://KNOMI.local/update` via
+  mDNS), choose the `.bin`, and Flash. The on-screen **Update Firmware** button links here.
+- **PlatformIO** — uncomment the OTA lines in `platformio.ini` (`upload_protocol = custom`,
+  `extra_scripts = platformio_upload_ota.py`, `upload_url = http://<knomi-ip>/update`) and
+  run `pio run -e knomiv1 -t upload`.
+
+Integrity is guaranteed by the ESP32 image's own appended SHA-256 (the bootloader verifies
+it before activating the new slot); genuine failures return a readable HTTP 500 (e.g.
+`OTA verify failed: …`) instead of stock's opaque "Bad Request". **Watchdog toggles and your
+WiFi/Moonraker config persist across updates.**
+
+### Building from source
+
+Standard [PlatformIO](https://platformio.org/) project (builds on x86 or a Raspberry Pi):
+
+```bash
+pio run -e knomiv1     # KNOMI V1  → .pio/build/knomiv1/firmware.bin
+pio run -e knomiv2     # KNOMI V2  → .pio/build/knomiv2/firmware.bin
+pio test -e native     # host unit tests for the watchdog logic (no hardware)
+```
 
 ---
 

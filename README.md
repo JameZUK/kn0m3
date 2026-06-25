@@ -116,7 +116,7 @@ The resulting firmware is at `.pio/build/<env>/firmware.bin`.
 ### Flashing over the network (OTA) ✅
 
 KNOMI ships a **dual-OTA partition layout** and an OTA web endpoint (AsyncElegantOTA), so
-you can update **without removing it from the toolhead**:
+once you're running kn0m3 you can update **without removing it from the toolhead**:
 
 1. **Web UI** — browse to `http://<knomi-ip>/update` (or `http://KNOMI.local/update` via
    mDNS, using your configured hostname), upload `firmware.bin`, and let it reboot. The
@@ -125,9 +125,13 @@ you can update **without removing it from the toolhead**:
    (`upload_protocol = custom`, `extra_scripts = platformio_upload_ota.py`,
    `upload_url = http://<knomi-ip>/update`) and run `pio run -e knomiv1 -t upload`.
 
-Because the stock BTT firmware uses the **same partition table and OTA endpoint**, you can
-even flash kn0m3 onto a stock KNOMI straight over the network — no USB needed. (First boot
-still resets the stored config, so you'll re-enter WiFi via the `BTT-KNOMI` AP.)
+> **OTA "Bad Request" fix (v1.0.3+).** The stock BTT firmware's OTA endpoint requires an
+> MD5 field and reports *every* error as HTTP 400 — its upload page then just shows
+> `[HTTP ERROR] Bad Request`, hiding the real cause. kn0m3 patches AsyncElegantOTA to make
+> MD5 optional and to report genuine flash failures as a readable HTTP 500. Because **the
+> stock firmware still has the broken handler**, do your **first** kn0m3 flash over **USB**;
+> after that, network OTA works reliably. (First boot resets stored config, so re-enter
+> WiFi via the `BTT-KNOMI` AP.)
 
 ### Flashing over USB
 

@@ -125,17 +125,16 @@ once you're running kn0m3 you can update **without removing it from the toolhead
    (`upload_protocol = custom`, `extra_scripts = platformio_upload_ota.py`,
    `upload_url = http://<knomi-ip>/update`) and run `pio run -e knomiv1 -t upload`.
 
-> **OTA "Bad Request" fix (v1.0.3+).** The stock BTT firmware's OTA endpoint requires an
-> MD5 field and reports *every* error as HTTP 400 — its upload **page** then just shows
-> `[HTTP ERROR] Bad Request`, hiding the real cause. kn0m3 patches AsyncElegantOTA to make
-> MD5 optional and to report genuine flash failures as a readable HTTP 500.
+> **A reliable OTA (v1.0.4+).** kn0m3 **replaces** BTT's bundled AsyncElegantOTA — which
+> demanded an MD5 field and reported *every* failure as an opaque HTTP 400
+> (`[HTTP ERROR] Bad Request`) — with its own small handler ([`src/ota.cpp`](src/ota.cpp)):
+> integrity comes from the **ESP32 image's own appended SHA-256**, which the bootloader
+> verifies before activating the new slot, plus an optional end-to-end SHA-256 transport
+> check. No MD5, no field-ordering games, and genuine failures come back as a readable
+> HTTP 500 (e.g. `OTA verify failed: …`).
 
-#### Recommended: flash from the command line (no USB, works against stock too)
-
-The web *page* is the flaky part — the `/update` endpoint itself is fine if you give it a
-correctly-formed request. [`tools/ota_flash.sh`](tools/ota_flash.sh) does exactly that
-(MD5 field first, then the firmware) and **prints the device's real response** instead of
-hiding it:
+Flash from the command line with [`tools/ota_flash.sh`](tools/ota_flash.sh) (sends the
+firmware + its SHA-256 and prints the device's real response):
 
 ```bash
 # grab the firmware for your board from the Releases page, then:
@@ -143,10 +142,11 @@ tools/ota_flash.sh <knomi-ip> knomi-v1-firmware.bin   # V1 (ESP32-WROOM)
 tools/ota_flash.sh <knomi-ip> knomi-v2-firmware.bin   # V2 (ESP32-S3)
 ```
 
-This works against **both** the stock BTT firmware and kn0m3, so you can move a stock KNOMI
-onto kn0m3 entirely over the network. (First boot resets stored config, so re-enter WiFi
-via the `BTT-KNOMI` AP.) USB is only needed as a last resort if the script reports a
-genuine flash failure (e.g. `OTA flash failed: …`).
+> **The very first kn0m3 flash must be done over USB.** The stock BTT firmware's OTA is the
+> buggy thing kn0m3 replaces — on some units its multipart handler corrupts the upload
+> before any checksum we control, so a stock device cannot be flashed over the network at
+> all. Flash kn0m3 **once over USB**; from then on the reliable OTA above handles every
+> future update. (First boot resets stored config, so re-enter WiFi via the `BTT-KNOMI` AP.)
 
 ### Flashing over USB
 

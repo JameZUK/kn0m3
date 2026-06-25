@@ -1,6 +1,5 @@
 Import("env")
 import os
-import re
 import shutil
 import filecmp
 
@@ -36,54 +35,6 @@ def patch_lvgl():
         print("[patch] applied lv_disp.c black-screen fix")
 
 
-def patch_elegant_ota():
-    #
-    # The BTT fork of AsyncElegantOTA requires an "MD5" multipart field and
-    # returns HTTP 400 on any problem (missing/invalid MD5, begin/write/end
-    # failure). The bundled web frontend only shows the server message for 500
-    # responses -- for 400 it just prints "[HTTP ERROR] Bad Request", hiding the
-    # real cause and making network flashing fail opaquely.
-    #
-    # Fix: make MD5 optional (revert to upstream ElegantOTA behaviour -- the
-    # ESP32 image header is still validated on flash) and report genuine flash
-    # failures as 500 with Update.errorString() so they're actually readable.
-    #
-    dst = os.path.join(LIBDEPS_DIR, PIOENV, "AsyncElegantOTA", "src", "AsyncElegantOTA.cpp")
-    if not os.path.isfile(dst):
-        print("[patch] skip AsyncElegantOTA: not present for env '%s'" % PIOENV)
-        return
-
-    text = open(dst, "r").read()
-    if "kn0m3: MD5 verification disabled" in text:
-        print("[patch] AsyncElegantOTA already patched")
-        return
-
-    original = text
-
-    # 1) Drop the mandatory MD5 check (the hasParam-missing + setMD5-invalid block).
-    md5_block = re.compile(
-        r'if\(!request->hasParam\("MD5", true\)\)\s*\{.*?MD5 parameter missing"\);\s*\}\s*'
-        r'if\(!Update\.setMD5\([^;]*\)\)\s*\{.*?MD5 parameter invalid"\);\s*\}',
-        re.DOTALL)
-    text = md5_block.sub(
-        "// kn0m3: MD5 verification disabled for OTA compatibility (see apply_patches.py)",
-        text, count=1)
-
-    # 2) Make real flash failures visible (frontend shows responseText only for 500).
-    text = text.replace(
-        'request->send(400, "text/plain", "OTA could not begin")',
-        'request->send(500, "text/plain", String("OTA flash failed: ") + Update.errorString())')
-    text = text.replace(
-        'request->send(400, "text/plain", "Could not end OTA")',
-        'request->send(500, "text/plain", String("OTA verify failed: ") + Update.errorString())')
-
-    if text == original or "kn0m3: MD5 verification disabled" not in text:
-        print("[patch] WARNING: AsyncElegantOTA layout changed, OTA patch NOT applied")
-        return
-
-    open(dst, "w").write(text)
-    print("[patch] applied AsyncElegantOTA MD5-optional / readable-error fix")
-
-
 patch_lvgl()
-patch_elegant_ota()
+# Note: kn0m3 ships its own OTA handler (src/ota.cpp) and no longer depends on
+# the BTT AsyncElegantOTA fork, so its MD5 patch has been retired.

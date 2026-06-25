@@ -1,8 +1,9 @@
 #include <ESPAsyncWebServer.h>
-#include <AsyncElegantOTA.h>
 #include <ESPmDNS.h>
 
 #include "knomi.h"
+
+void ota_setup(AsyncWebServer *server);  // kn0m3 OTA handler (src/ota.cpp)
 
 static AsyncWebServer server(SERVER_PORT);
 
@@ -173,7 +174,7 @@ void webserver_setup(void) {
     } else {
         Serial.println("mDNS start ok!");
     }
-    AsyncElegantOTA.begin(&server);
+    ota_setup(&server);
 
     server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
         AsyncWebServerResponse *response = request->beginResponse_P(200, "image/x-icon", btt_logo_only_ico, sizeof(btt_logo_only_ico));

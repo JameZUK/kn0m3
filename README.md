@@ -142,11 +142,18 @@ tools/ota_flash.sh <knomi-ip> knomi-v1-firmware.bin   # V1 (ESP32-WROOM)
 tools/ota_flash.sh <knomi-ip> knomi-v2-firmware.bin   # V2 (ESP32-S3)
 ```
 
-> **The very first kn0m3 flash must be done over USB.** The stock BTT firmware's OTA is the
-> buggy thing kn0m3 replaces — on some units its multipart handler corrupts the upload
-> before any checksum we control, so a stock device cannot be flashed over the network at
-> all. Flash kn0m3 **once over USB**; from then on the reliable OTA above handles every
-> future update. (First boot resets stored config, so re-enter WiFi via the `BTT-KNOMI` AP.)
+> **The very first kn0m3 flash must be done over USB — once.** The stock BTT firmware's OTA
+> is the buggy thing kn0m3 replaces, and it's broken for **every** image: verified by
+> control test, even BTT's *own* official `knomi1_firmware.bin` is rejected with
+> `Could not end OTA`. So no client or checksum trick can flash a stock unit over the
+> network. Do the first install over USB with the one-liner below; from then on the reliable
+> OTA above handles every future update. (First boot resets stored config, so re-enter WiFi
+> via the `BTT-KNOMI` AP.)
+>
+> ```bash
+> # download knomi-v1-firmware.bin from Releases, KNOMI on USB, then:
+> tools/usb_flash.sh v1            # or: v2 — optional serial port as 2nd arg
+> ```
 
 ### Flashing over USB
 
